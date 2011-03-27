@@ -1,0 +1,10 @@
+Uses some code from the Emacs Wave client
+
+http://code.google.com/p/wave-client-for-emacs/
+
+and some ideas from Rudel
+
+http://www.emacswiki.org/emacs/Rudel
+http://rudel.bzr.sf.net/bzr/rudel/branches/etherpad/files/
+
+to connect to the experimental EtherpadLite.
