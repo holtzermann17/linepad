@@ -14,6 +14,7 @@
 
 ;;; Code:
 
+(add-to-list 'load-path "./")
 (require 'json)
 (require 'websocket)
 
@@ -53,15 +54,19 @@
     (concat "t." result)))
 
 (defun linepad-form-initial-request ()
+  "Called during initialization, sets the pad name etc."
   (let* ((json-part
           (replace-regexp-in-string 
            " "
            ""
            (json-encode
-            `((type  . "CLIENT_READY")
-              (padId .  ,linepad-pad-name)
+            `((component  . "pad")
+              (type  . "CLIENT_READY")
+              (sessionID)
+              (password)
+              (padId . ,linepad-pad-name)
               (token . ,(linepad-token))
-              (protocolVersion . 1)))))
+              (protocolVersion . 2)))))
          (len (length json-part)))
     (concat (format "~m~%s~m~~j~" (+ 3 len))
             json-part)))
@@ -133,15 +138,18 @@ back, parse them and call the appropriate callbacks."
   (setq baserev 0)
   (setq user-id "unknown")
   (setq changesets nil)
+  (setq sessionid (with-current-buffer (url-retrieve-synchronously "http://localhost:9001/socket.io/1/")
+		    (forward-line -1)
+                    (goto-char (line-beginning-position))
+                    (search-forward ":")
+                    (buffer-substring-no-properties (line-beginning-position) (1- (point)))))
   (setq linepad-connection  
         (websocket-open
-         "ws://localhost:9001/socket.io/websocket"
+         (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)
          'linepad-filter))
   (sleep-for 1.0)
-  (websocket-send linepad-connection
-                  (linepad-form-initial-request))
-  (run-at-time (linepad-five-seconds-hence) 5
-               #'linepad-heartbeat))
+  (websocket-send linepad-connection (linepad-form-initial-request))
+  (run-at-time (linepad-five-seconds-hence) 5 #'linepad-heartbeat))
 
 ; (revision changeset user-id)
 ;; baserev
