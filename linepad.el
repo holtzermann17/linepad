@@ -37,12 +37,21 @@
               (list (first now)
                     (+ (second now) 5)))) 11 19))
 
+(defun linepad-three-minutes-hence ()   
+  (substring (current-time-string
+            (let ((now (current-time)))
+              (list (first now)
+                    (+ (second now) 180)))) 11 19))
+
 (defun linepad-heartbeat ()
   (websocket-send linepad-connection
                   (let* ((message (format "~h~%s" linepad-beat))
                          (len (length message)))
                     (format "~m~%s~m~%s" len message)))
   (setq linepad-beat (1+ linepad-beat)))
+
+(defun linepad-hangup ()
+  (websocket-close linepad-connection))
 
 (defun linepad-token ()
   (let ((avail (mapcar 'char-to-string 
@@ -62,9 +71,9 @@
            (json-encode
             `((component  . "pad")
               (type  . "CLIENT_READY")
+              (padId . ,linepad-pad-name)
               (sessionID)
               (password)
-              (padId . ,linepad-pad-name)
               (token . ,(linepad-token))
               (protocolVersion . 2)))))
          (len (length json-part)))
@@ -138,7 +147,9 @@ back, parse them and call the appropriate callbacks."
   (setq baserev 0)
   (setq user-id "unknown")
   (setq changesets nil)
-  (setq sessionid (with-current-buffer (url-retrieve-synchronously "http://localhost:9001/socket.io/1/")
+  (setq sessionid (with-current-buffer (url-retrieve-synchronously 
+                                        (format "http://localhost:9001/socket.io/1/?t=%s"
+                                                (format-time-string "%s" (current-time) t)))
 		    (forward-line -1)
                     (goto-char (line-beginning-position))
                     (search-forward ":")
@@ -147,9 +158,10 @@ back, parse them and call the appropriate callbacks."
         (websocket-open
          (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)
          'linepad-filter))
-  (sleep-for 1.0)
+  (run-at-time (linepad-five-seconds-hence) 5 #'linepad-heartbeat)
+  (sleep-for 6.0)
   (websocket-send linepad-connection (linepad-form-initial-request))
-  (run-at-time (linepad-five-seconds-hence) 5 #'linepad-heartbeat))
+  (run-at-time (linepad-three-minutes-hence) nil #'linepad-hangup))
 
 ; (revision changeset user-id)
 ;; baserev
@@ -163,7 +175,7 @@ back, parse them and call the appropriate callbacks."
 (defun linepad-send-text (changeset)
   ;; long term we don't want to replace spaces in the
   ;; whole string!
-  (let* ((json-part (replace-regexp-in-string 
+  (let* ((json-part (replace-regexp-in-string
                      " " ""
                      (json-encode
                       `((type . "COLLABROOM")
@@ -175,11 +187,13 @@ back, parse them and call the appropriate callbacks."
                                  (\0 . ("author" ,user-id)))
                                 (nextNum . 1)))))))
          (len (length json-part)))
-    (websocket-send linepad-connection 
+    (websocket-send linepad-connection
                     (concat (format "~m~%s~m~~j~" 
                                     (+ 3 len))
                             json-part)))
   (setq baserev (1+ baserev)))
+
+;; test: (linepad-send-text changeset)
 
 (defun linepad-terminate-connection ()
   (websocket-close linepad-connection))

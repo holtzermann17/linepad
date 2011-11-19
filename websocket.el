@@ -53,7 +53,7 @@ Best set in a LET statement around the `websocket-open' reply.")
 The buffer is ` *websocket URL debug*' where URL is the
 URL of the connection.")
 
-(defconst websocket-keylen 20)
+(defconst websocket-keylen 22)
 
 (defun websocket-genbytes ()
   "Generate bytes used at the end of the handshake."
@@ -69,21 +69,13 @@ URL of the connection.")
             (substring target-str r))))
 
 (defun websocket-genkey ()
-  "Generate a key suitable for the websocket handshake."
-  (let* ((num-spaces (+ 1 (random 12)))
-         (max-num-str (calc-eval (format "floor(random(4294967295 / %d)) * %d"
-                                         num-spaces num-spaces)))
-         (num max-num-str))
-    (dotimes (_ num-spaces)
-      (setq max-num-str (websocket-random-insert " " max-num-str)))
-    (dotimes (_ (+ 1 (random 12)))
-      (setq max-num-str (websocket-random-insert
-                         (let ((r (random 82)))
-                           (char-to-string
-                            (if (< r 15) (+ 33 r)
-                               (+ 58 (- r 15)))))
-                         max-num-str)))
-    (cons max-num-str num)))
+  (let ((avail (mapcar 'char-to-string 
+                       (append "0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz" nil)))
+        (result ""))
+    (dotimes (i 22)
+      (setq result (concat (nth (random 61) avail)
+                           result)))
+    (concat result "==")))
 
 ;;; This function gets called by someone over and over again.
 ;; Need to run a trace on it and try to figure out why.
@@ -93,8 +85,7 @@ Websocket packets are sent as the only argument to FILTER, and if
 the connection is closed, then CLOSE-CALLBACK is called."
   (let* ((name (format "websocket to %s" url))
          (url-struct (url-generic-parse-url url))
-         (key1-cons (websocket-genkey))
-         (key2-cons (websocket-genkey))
+         (key (websocket-genkey))
          (bytes (websocket-genbytes))
          (buf-name (format " *%s*" name))
          (coding-system-for-read 'binary)
@@ -131,26 +122,33 @@ the connection is closed, then CLOSE-CALLBACK is called."
                                   (funcall (websocket-close-callback
                                             websocket)))))))
 
-    (websocket-debug websocket (format "GET %s HTTP/1.1\r\n"
+    ;; (websocket-debug websocket (format "GET %s HTTP/1.1\r\n"
+    ;;                              (let ((path (url-filename url-struct)))
+    ;;                                (if (> (length path) 0) path "/"))))
+    ;; (websocket-debug websocket (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nHost: %s\r\nOrigin: %s\r\nSec-WebSocket-Key1: %s\r\nSec-WebSocket-Key2: %s\r\n\r\n%s"
+    ;;                              (url-host (url-generic-parse-url url))
+    ;;                              system-name
+    ;;                              (car key1-cons)
+    ;;                              (car key2-cons)
+    ;;                              (if websocket-use-v75 ""  bytes)))
+    (websocket-debug websocket
+                         (format "GET %s HTTP/1.1\r\n"
                                  (let ((path (url-filename url-struct)))
                                    (if (> (length path) 0) path "/"))))
-    (websocket-debug websocket (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nHost: %s\r\nOrigin: %s\r\nSec-WebSocket-Key1: %s\r\nSec-WebSocket-Key2: %s\r\n\r\n%s"
-                                 (url-host (url-generic-parse-url url))
+    (websocket-debug websocket
+                         (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 8\r\nHost: %s\r\nSec-WebSocket-Origin: %s\r\nSec-WebSocket-Key: %s\r\n"
                                  system-name
-                                 (car key1-cons)
-                                 (car key2-cons)
-                                 (if websocket-use-v75 ""  bytes)))
+                                 (url-host (url-generic-parse-url url))
+                                 key))
     (process-send-string conn
                          (format "GET %s HTTP/1.1\r\n"
                                  (let ((path (url-filename url-struct)))
                                    (if (> (length path) 0) path "/"))))
     (process-send-string conn
-                         (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nHost: %s\r\nOrigin: %s\r\nSec-WebSocket-Key1: %s\r\nSec-WebSocket-Key2: %s\r\n\r\n%s"
-                                 (url-host (url-generic-parse-url url))
+                         (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 8\r\nHost: %s\r\nSec-WebSocket-Origin: %s\r\nSec-WebSocket-Key: %s\r\n"
                                  system-name
-                                 (car key1-cons)
-                                 (car key2-cons)
-                                 (if websocket-use-v75 ""  bytes)))
+                                 (url-host (url-generic-parse-url url))
+                                 key))
     (websocket-debug websocket "Websocket opened")
     websocket))
 
@@ -201,6 +199,8 @@ the connection is closed, then CLOSE-CALLBACK is called."
     (error "No webserver process to send data to!"))
 ;  (websocket-debug websocket "Sending on connection: %s" (websocket-conn websocket))
 ;  (websocket-debug websocket "Sending: %s" text)
+  (wave-debug "Sending on connection: %s" (websocket-conn websocket))
+  (wave-debug "Sending: %s" text)
   (process-send-string (websocket-conn websocket)
                        (concat (unibyte-string ?\0) text
                                (unibyte-string ?\377))))
