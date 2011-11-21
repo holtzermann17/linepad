@@ -24,9 +24,9 @@
 (require 'wave-client-websocket) 
 
 (defvar linepad-connection)
-(defvar linepad-beat 1)
+(defvar linepad-beat-number 1)
 (defvar linepad-timer nil)
-(defvar linepad-pad-name "test")
+(defvar linepad-pad-name "test5")
 (defvar linepad-handshake-response-buffer nil)
 
 (defvar baserev 0)
@@ -45,18 +45,26 @@
               (list (first now)
                     (+ (second now) 180)))) 11 19))
 
+;; (defun linepad-heartbeat ()
+;;   (websocket-send linepad-connection
+;;                   (let* ((message (format "~h~%s" linepad-beat-number))
+;;                          (len (length message)))
+;;                     (format "~m~%s~m~%s" len message)))
+;;   (setq linepad-beat-number (1+ linepad-beat-number)))
+
 (defun linepad-heartbeat ()
-  (websocket-send linepad-connection
-                  (let* ((message (format "~h~%s" linepad-beat))
-                         (len (length message)))
-                    (format "~m~%s~m~%s" len message)))
-  (setq linepad-beat (1+ linepad-beat)))
+  (websocket-send linepad-connection "2::")
+  (setq linepad-beat-number (1+ linepad-beat-number)))
 
 (defun linepad-hangup ()
   (interactive)
-  (kill-buffer linepad-handshake-response-buffer)
   (cancel-timer linepad-timer)
   (websocket-close linepad-connection))
+
+(defun linepad-kill ()
+  (interactive)
+  (kill-buffer linepad-handshake-response-buffer)
+  (linepad-hangup))
 
 (defun linepad-token ()
   (let ((avail (mapcar 'char-to-string 
@@ -82,8 +90,7 @@
               (token . ,(linepad-token))
               (protocolVersion . 2)))))
          (len (length json-part)))
-    (concat (format "~m~%s~m~~j~" (+ 3 len))
-            json-part)))
+    (concat "4:::" json-part)))
 
 ;; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 ;; Importing things from wave-client-websocket.el and modifying them here
@@ -149,7 +156,7 @@ back, parse them and call the appropriate callbacks."
 
 (defun linepad-initiate-connection ()
   (interactive)
-  (setq linepad-beat 0)
+  (setq linepad-beat-number 0)
   (setq baserev 0)
   (setq user-id "unknown")
   (setq changesets nil)
@@ -174,8 +181,7 @@ back, parse them and call the appropriate callbacks."
 ;  (url-filename (url-generic-parse-url (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)))
 
   (sleep-for 1.0)
-  (setq linepad-timer (run-at-time
-                       (linepad-five-seconds-hence) 5 #'linepad-heartbeat))
+  (setq linepad-timer (run-at-time (linepad-five-seconds-hence) 5 #'linepad-heartbeat))
   (websocket-send linepad-connection (linepad-form-initial-request))
   )
 
@@ -184,7 +190,7 @@ back, parse them and call the appropriate callbacks."
 ;; "Z:54>e*0+e$hello etherpad"
 ;; (plist-get default-user-vars :user-id)
 
-(setq changeset "Z:t>d*0+d$helloetherpad")
+(setq changeset "Z:6c>d*0+d$helloetherpad")
 
 ;; Note: in messages TO the server, say baseRev
 ;; whereas messages from the server say newRev
@@ -195,6 +201,7 @@ back, parse them and call the appropriate callbacks."
                      " " ""
                      (json-encode
                       `((type . "COLLABROOM")
+                        (component . "pad")
                         (data
                          (type      . "USER_CHANGES")
                          (baseRev   . ,baserev)
@@ -203,10 +210,13 @@ back, parse them and call the appropriate callbacks."
                                  (\0 . ("author" ,user-id)))
                                 (nextNum . 1)))))))
          (len (length json-part)))
+    ;; (websocket-send linepad-connection
+    ;;                 (concat (format "~m~%s~m~~j~" (+ 3 len))
+    ;;                         json-part))
     (websocket-send linepad-connection
-                    (concat (format "~m~%s~m~~j~" 
-                                    (+ 3 len))
-                            json-part)))
+                    (concat "4:::"
+                            json-part))
+    )
   (setq baserev (1+ baserev)))
 
 ;; test: (linepad-send-text changeset)

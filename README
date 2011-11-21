@@ -9,16 +9,3 @@ http://rudel.bzr.sf.net/bzr/rudel/branches/etherpad/files/
 
 to connect to the experimental Etherpad Lite.
 
-Note that you need to make the following changes to recent
-versions of Etherpad Lite to enable websockets:
-
-https://github.com/Pita/etherpad-lite/blob/master/node/server.js#L422
-
-    // io.set('transports', ['xhr-polling']);
-    io.set('transports', ['websocket']);
-
-and then change the version number of socket.io in 
-
-  https://github.com/Pita/etherpad-lite/blob/master/package.json#L13 
-
-to 0.8.6, and execute bin/installDeps.sh 
