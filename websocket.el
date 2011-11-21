@@ -79,6 +79,8 @@ URL of the connection.")
 
 ;;; This function gets called by someone over and over again.
 ;; Need to run a trace on it and try to figure out why.
+
+;; original `websocket-open' with a few changes
 (defun websocket-open (url filter &optional close-callback)
   "Open a websocket connection to URL.
 Websocket packets are sent as the only argument to FILTER, and if
@@ -122,34 +124,33 @@ the connection is closed, then CLOSE-CALLBACK is called."
                                   (funcall (websocket-close-callback
                                             websocket)))))))
 
-    ;; (websocket-debug websocket (format "GET %s HTTP/1.1\r\n"
-    ;;                              (let ((path (url-filename url-struct)))
-    ;;                                (if (> (length path) 0) path "/"))))
-    ;; (websocket-debug websocket (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nHost: %s\r\nOrigin: %s\r\nSec-WebSocket-Key1: %s\r\nSec-WebSocket-Key2: %s\r\n\r\n%s"
-    ;;                              (url-host (url-generic-parse-url url))
-    ;;                              system-name
-    ;;                              (car key1-cons)
-    ;;                              (car key2-cons)
-    ;;                              (if websocket-use-v75 ""  bytes)))
+    ;; for whatever reason the requests documented here
+    ;; don't seem to be working, or even registering on
+    ;; the server now.
+    
     (websocket-debug websocket
-                         (format "GET %s HTTP/1.1\r\n"
+                         (format "GET %s HTTP/1.1\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 8\r\nHost: %s\r\nSec-WebSocket-Origin: %s\r\nSec-WebSocket-Key: %s\r\n"
                                  (let ((path (url-filename url-struct)))
-                                   (if (> (length path) 0) path "/"))))
-    (websocket-debug websocket
-                         (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 8\r\nHost: %s\r\nSec-WebSocket-Origin: %s\r\nSec-WebSocket-Key: %s\r\n"
-                                 system-name
-                                 (url-host (url-generic-parse-url url))
+                                   (if (> (length path) 0) path "/"))
+                                 (concat (url-host (url-generic-parse-url url))
+                                         ":" (int-to-string (url-port (url-generic-parse-url url))))
+                                 (concat "http://" (url-host (url-generic-parse-url url))
+                                         ":" (int-to-string (url-port (url-generic-parse-url url))))
                                  key))
+
     (process-send-string conn
-                         (format "GET %s HTTP/1.1\r\n"
+                         (format "GET %s HTTP/1.1\r\nUpgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 8\r\nHost: %s\r\nSec-WebSocket-Origin: %s\r\nSec-WebSocket-Key: %s\r\n"
                                  (let ((path (url-filename url-struct)))
-                                   (if (> (length path) 0) path "/"))))
-    (process-send-string conn
-                         (format "Upgrade: WebSocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 8\r\nHost: %s\r\nSec-WebSocket-Origin: %s\r\nSec-WebSocket-Key: %s\r\n"
-                                 system-name
-                                 (url-host (url-generic-parse-url url))
+                                   (if (> (length path) 0) path "/"))
+                                 (concat (url-host (url-generic-parse-url url))
+                                         ":" (int-to-string (url-port (url-generic-parse-url url))))
+                                 (concat "http://" (url-host (url-generic-parse-url url))
+                                         ":" (int-to-string (url-port (url-generic-parse-url url))))
                                  key))
-    (websocket-debug websocket "Websocket opened")
+
+    (websocket-debug websocket (format "To begin with, %s has status: %s"
+                                       (websocket-conn websocket)
+                                       (process-status (websocket-conn websocket))))
     websocket))
 
 (defun websocket-debug (websocket msg &rest args)
@@ -197,16 +198,17 @@ the connection is closed, then CLOSE-CALLBACK is called."
 ;  (websocket-ensure-connected websocket)
   (unless (websocket-openp websocket)
     (error "No webserver process to send data to!"))
-;  (websocket-debug websocket "Sending on connection: %s" (websocket-conn websocket))
-;  (websocket-debug websocket "Sending: %s" text)
-  (wave-debug "Sending on connection: %s" (websocket-conn websocket))
-  (wave-debug "Sending: %s" text)
+  (wave-debug "Sending on connection %s" (websocket-conn websocket))
+  (wave-debug "   %s" text)
   (process-send-string (websocket-conn websocket)
                        (concat (unibyte-string ?\0) text
                                (unibyte-string ?\377))))
 
 (defun websocket-openp (websocket)
   "Returns true if the websocket exists and is open."
+  (wave-debug (format "...now %s has status: %s"
+                      (websocket-conn linepad-connection)
+                      (process-status (websocket-conn linepad-connection))))
   (and websocket (eq 'open (process-status (websocket-conn websocket)))))
 
 ;; This works weirdly, because it uses

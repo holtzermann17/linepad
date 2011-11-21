@@ -25,7 +25,9 @@
 
 (defvar linepad-connection)
 (defvar linepad-beat 1)
+(defvar linepad-timer nil)
 (defvar linepad-pad-name "test")
+(defvar linepad-handshake-response-buffer nil)
 
 (defvar baserev 0)
 (defvar user-id "unknown")
@@ -51,6 +53,9 @@
   (setq linepad-beat (1+ linepad-beat)))
 
 (defun linepad-hangup ()
+  (interactive)
+  (kill-buffer linepad-handshake-response-buffer)
+  (cancel-timer linepad-timer)
   (websocket-close linepad-connection))
 
 (defun linepad-token ()
@@ -143,25 +148,36 @@ back, parse them and call the appropriate callbacks."
 ;; %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 (defun linepad-initiate-connection ()
+  (interactive)
   (setq linepad-beat 0)
   (setq baserev 0)
   (setq user-id "unknown")
   (setq changesets nil)
-  (setq sessionid (with-current-buffer (url-retrieve-synchronously 
-                                        (format "http://localhost:9001/socket.io/1/?t=%s"
-                                                (format-time-string "%s" (current-time) t)))
-		    (forward-line -1)
-                    (goto-char (line-beginning-position))
-                    (search-forward ":")
-                    (buffer-substring-no-properties (line-beginning-position) (1- (point)))))
+  
+  (setq sessionid
+        (with-current-buffer (url-retrieve-synchronously 
+                              (format "http://localhost:9001/socket.io/1/?t=%s"
+                                      (format-time-string "%s" (current-time) t)))
+          (setq linepad-handshake-response-buffer (buffer-name))
+          (forward-line -1)
+          (goto-char (line-beginning-position))
+          (search-forward ":")
+          (buffer-substring-no-properties (line-beginning-position) (1- (point)))))
+
   (setq linepad-connection  
         (websocket-open
          (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)
          'linepad-filter))
-  (run-at-time (linepad-five-seconds-hence) 5 #'linepad-heartbeat)
-  (sleep-for 6.0)
+
+;  (url-host (url-generic-parse-url (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)))
+;  (url-port (url-generic-parse-url (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)))
+;  (url-filename (url-generic-parse-url (format "ws://localhost:9001/socket.io/1/websocket/%s" sessionid)))
+
+  (sleep-for 1.0)
+  (setq linepad-timer (run-at-time
+                       (linepad-five-seconds-hence) 5 #'linepad-heartbeat))
   (websocket-send linepad-connection (linepad-form-initial-request))
-  (run-at-time (linepad-three-minutes-hence) nil #'linepad-hangup))
+  )
 
 ; (revision changeset user-id)
 ;; baserev
